@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "render-build": "npm install --include=dev && npm run build",
+    "postinstall": "node scripts/ensure-dist.js",
+    "prestart": "node scripts/ensure-dist.js",
     "start": "node dist/index.js"
   },
   "dependencies": {

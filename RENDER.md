@@ -13,8 +13,8 @@
 3. Settings (use **repo root**, leave Root Directory **empty**):
    - **Root Directory:** *(blank)* — not `backend` or `src`
    - **Runtime:** Node
-   - **Build Command:** `npm install --include=dev && npm run build`  
-     (`--include=dev` is required because TypeScript is a devDependency and Render sets `NODE_ENV=production` during build.)
+   - **Build Command:** `npm install` *(minimum)* — the `postinstall` script compiles TypeScript automatically.  
+     **Recommended:** `npm install --include=dev && npm run build` (faster, builds during the build phase).
    - **Start Command:** `npm start`
    - **Health Check Path:** `/health`
 
@@ -28,7 +28,9 @@ Or use the repo root **Blueprint** (`render.yaml`) via **New** → **Blueprint**
 - **Build:** `npm install --include=dev && npm run build`
 - **Start:** `npm start`
 
-If `dist/index.js` is missing at start, the build step did not run or failed — check build logs for `tsc` / TypeScript errors.
+If `dist/index.js` is missing at start, check logs for `[ensure-dist]` — push the latest `scripts/ensure-dist.js` and redeploy.
+
+**Your current Render build is only `npm install`** — that is OK after this fix, but you must push `scripts/ensure-dist.js` to GitHub and redeploy.
 
 ## 3. Environment variables
 
