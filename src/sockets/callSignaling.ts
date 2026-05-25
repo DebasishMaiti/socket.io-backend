@@ -92,7 +92,14 @@ export function handleCallUserDisconnect(userId: string) {
   });
 }
 
+function normalizeId(id: unknown): string {
+  return id == null ? "" : String(id);
+}
+
 export function registerCallHandlers(socket: Socket, userId: string) {
+  const selfId = normalizeId(userId);
+  if (!selfId || selfId === "undefined") return;
+
   socket.on(
     "call:invite",
     ({
@@ -108,30 +115,32 @@ export function registerCallHandlers(socket: Socket, userId: string) {
       callType: CallType;
       callerName: string;
     }) => {
-      if (!userId || !roomId || !participants?.length) return;
+      if (!selfId || !roomId || !participants?.length) return;
 
-      const memberIds = [...new Set([...participants, userId])];
+      const memberIds = [
+        ...new Set([...participants.map(normalizeId), selfId].filter(Boolean)),
+      ];
 
       if (!callRooms.has(roomId)) {
         callRooms.set(roomId, {
           roomId,
           conversationId,
           callType,
-          hostId: userId,
+          hostId: selfId,
           hostName: callerName,
-          members: new Map([[userId, { name: callerName, joinedAt: Date.now() }]]),
+          members: new Map([[selfId, { name: callerName, joinedAt: Date.now() }]]),
         });
       }
 
-      addUserToRoomIndex(userId, roomId);
+      addUserToRoomIndex(selfId, roomId);
 
       memberIds.forEach((participantId) => {
-        if (participantId === userId) return;
+        if (participantId === selfId) return;
         emitToUser(participantId, "call:incoming", {
           roomId,
           conversationId,
           callType,
-          callerId: userId,
+          callerId: selfId,
           callerName,
           participants: memberIds,
         });
@@ -142,30 +151,33 @@ export function registerCallHandlers(socket: Socket, userId: string) {
   socket.on(
     "call:accept",
     ({ roomId, userName }: { roomId: string; userName: string }) => {
-      if (!userId || !roomId) return;
+      if (!selfId || !roomId) return;
 
       const room = callRooms.get(roomId);
-      if (!room) return;
+      if (!room) {
+        emitToUser(selfId, "call:ended", { roomId, reason: "room_not_found" });
+        return;
+      }
 
-      room.members.set(userId, { name: userName, joinedAt: Date.now() });
-      addUserToRoomIndex(userId, roomId);
+      room.members.set(selfId, { name: userName, joinedAt: Date.now() });
+      addUserToRoomIndex(selfId, roomId);
 
       emitToRoom(
         roomId,
         "call:user-joined",
         {
           roomId,
-          userId,
+          userId: selfId,
           userName,
           participants: Array.from(room.members.entries()).map(([id, m]) => ({
             userId: id,
             name: m.name,
           })),
         },
-        userId
+        selfId
       );
 
-      emitToUser(userId, "call:accepted", {
+      emitToUser(selfId, "call:accepted", {
         roomId,
         callType: room.callType,
         participants: Array.from(room.members.entries()).map(([id, m]) => ({
@@ -179,9 +191,9 @@ export function registerCallHandlers(socket: Socket, userId: string) {
   socket.on(
     "call:reject",
     ({ roomId, userName }: { roomId: string; userName?: string }) => {
-      if (!userId || !roomId) return;
-      emitToRoom(roomId, "call:rejected", { roomId, userId, userName });
-      leaveRoom(userId, roomId, userName);
+      if (!selfId || !roomId) return;
+      emitToRoom(roomId, "call:rejected", { roomId, userId: selfId, userName });
+      leaveRoom(selfId, roomId, userName);
     }
   );
 
@@ -198,7 +210,7 @@ export function registerCallHandlers(socket: Socket, userId: string) {
       conversationId?: string;
       callType?: CallType;
     }) => {
-      if (!userId || !roomId) return;
+      if (!selfId || !roomId) return;
 
       let room = callRooms.get(roomId);
       if (!room) {
@@ -206,32 +218,32 @@ export function registerCallHandlers(socket: Socket, userId: string) {
           roomId,
           conversationId: conversationId || roomId,
           callType: callType || "video",
-          hostId: userId,
+          hostId: selfId,
           hostName: userName,
           members: new Map(),
         };
         callRooms.set(roomId, room);
       }
 
-      room.members.set(userId, { name: userName, joinedAt: Date.now() });
-      addUserToRoomIndex(userId, roomId);
+      room.members.set(selfId, { name: userName, joinedAt: Date.now() });
+      addUserToRoomIndex(selfId, roomId);
 
       emitToRoom(
         roomId,
         "call:user-joined",
         {
           roomId,
-          userId,
+          userId: selfId,
           userName,
           participants: Array.from(room.members.entries()).map(([id, m]) => ({
             userId: id,
             name: m.name,
           })),
         },
-        userId
+        selfId
       );
 
-      emitToUser(userId, "call:joined", {
+      emitToUser(selfId, "call:joined", {
         roomId,
         callType: room.callType,
         participants: Array.from(room.members.entries()).map(([id, m]) => ({
@@ -245,9 +257,9 @@ export function registerCallHandlers(socket: Socket, userId: string) {
   socket.on(
     "call:end",
     ({ roomId, userName }: { roomId: string; userName?: string }) => {
-      if (!userId || !roomId) return;
-      emitToRoom(roomId, "call:ended", { roomId, userId, userName });
-      leaveRoom(userId, roomId, userName);
+      if (!selfId || !roomId) return;
+      emitToRoom(roomId, "call:ended", { roomId, userId: selfId, userName });
+      leaveRoom(selfId, roomId, userName);
     }
   );
 
@@ -264,8 +276,10 @@ export function registerCallHandlers(socket: Socket, userId: string) {
       fromUserId: string;
       sdp: unknown;
     }) => {
-      if (!fromUserId || fromUserId !== userId) return;
-      emitToUser(toUserId, "webrtc:offer", { roomId, fromUserId, sdp });
+      const from = normalizeId(fromUserId);
+      const to = normalizeId(toUserId);
+      if (!from || from !== selfId || !to) return;
+      emitToUser(to, "webrtc:offer", { roomId, fromUserId: from, sdp });
     }
   );
 
@@ -282,8 +296,10 @@ export function registerCallHandlers(socket: Socket, userId: string) {
       fromUserId: string;
       sdp: unknown;
     }) => {
-      if (!fromUserId || fromUserId !== userId) return;
-      emitToUser(toUserId, "webrtc:answer", { roomId, fromUserId, sdp });
+      const from = normalizeId(fromUserId);
+      const to = normalizeId(toUserId);
+      if (!from || from !== selfId || !to) return;
+      emitToUser(to, "webrtc:answer", { roomId, fromUserId: from, sdp });
     }
   );
 
@@ -300,8 +316,10 @@ export function registerCallHandlers(socket: Socket, userId: string) {
       fromUserId: string;
       candidate: unknown;
     }) => {
-      if (!fromUserId || fromUserId !== userId) return;
-      emitToUser(toUserId, "webrtc:ice-candidate", { roomId, fromUserId, candidate });
+      const from = normalizeId(fromUserId);
+      const to = normalizeId(toUserId);
+      if (!from || from !== selfId || !to) return;
+      emitToUser(to, "webrtc:ice-candidate", { roomId, fromUserId: from, candidate });
     }
   );
 }
