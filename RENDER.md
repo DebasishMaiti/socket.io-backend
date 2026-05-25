@@ -13,7 +13,8 @@
 3. Settings (use **repo root**, leave Root Directory **empty**):
    - **Root Directory:** *(blank)* — not `backend` or `src`
    - **Runtime:** Node
-   - **Build Command:** `npm install && npm run build`
+   - **Build Command:** `npm install --include=dev && npm run build`  
+     (`--include=dev` is required because TypeScript is a devDependency and Render sets `NODE_ENV=production` during build.)
    - **Start Command:** `npm start`
    - **Health Check Path:** `/health`
 
@@ -23,7 +24,11 @@ The repo root `package.json` runs build/start inside `backend/` automatically.
 
 Or use the repo root **Blueprint** (`render.yaml`) via **New** → **Blueprint**.
 
-**Alternative:** set **Root Directory** to `backend` and use the same build/start commands there (no root `package.json` needed).
+**Alternative:** set **Root Directory** to `backend` and use:
+- **Build:** `npm install --include=dev && npm run build`
+- **Start:** `npm start`
+
+If `dist/index.js` is missing at start, the build step did not run or failed — check build logs for `tsc` / TypeScript errors.
 
 ## 3. Environment variables
 
