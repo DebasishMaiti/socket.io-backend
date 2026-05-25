@@ -1,6 +1,6 @@
 export function getAllowedOrigins(): string[] {
   const defaults =
-    "http://localhost:8080,https://socket-io-five-alpha.vercel.app,https://socket-io-qlgk.vercel.app";
+    "http://localhost:8080,https://socket-io-frontend-sage.vercel.app,https://socket-io-backend-z0wz.onrender.com";
 
   const origins = (process.env.ALLOWED_ORIGINS ?? defaults)
     .split(",")
