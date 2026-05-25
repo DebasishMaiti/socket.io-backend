@@ -3,6 +3,11 @@ import { Server } from "socket.io";
 import http from "http";
 import express from "express";
 import { getAllowedOrigins } from "../config/cors";
+import {
+  initCallSignaling,
+  registerCallHandlers,
+  handleCallUserDisconnect,
+} from "./callSignaling";
 
 const app = express();
 
@@ -25,6 +30,8 @@ export const getReceiverSocketId = (receiverId: string) => {
 
 // Map to store multiple socket IDs per user: {userId: [socketId1, socketId2]}
 export const userSocketMap: { [key: string]: string[] } = {};
+
+initCallSignaling(io, userSocketMap);
 
 io.on("connection", (socket) => {
   const userId = socket.handshake.query.userId as string;
@@ -96,17 +103,23 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("disconnect", () => {
-    if (userId && userId !== "undefined" && userSocketMap[userId]) {
-      userSocketMap[userId] = userSocketMap[userId].filter(id => id !== socket.id);
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`Socket ${socket.id} for User ${userId} disconnected`);
-      }
+  registerCallHandlers(socket, userId);
 
-      if (userSocketMap[userId].length === 0) {
-        delete userSocketMap[userId];
+  socket.on("disconnect", () => {
+    if (userId && userId !== "undefined") {
+      handleCallUserDisconnect(userId);
+
+      if (userSocketMap[userId]) {
+        userSocketMap[userId] = userSocketMap[userId].filter((id) => id !== socket.id);
         if (process.env.NODE_ENV !== "production") {
-          console.log(`User ${userId} is now fully offline`);
+          console.log(`Socket ${socket.id} for User ${userId} disconnected`);
+        }
+
+        if (userSocketMap[userId].length === 0) {
+          delete userSocketMap[userId];
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`User ${userId} is now fully offline`);
+          }
         }
       }
     }
